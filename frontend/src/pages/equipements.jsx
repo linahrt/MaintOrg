@@ -451,8 +451,8 @@ const fetchEquipments = useCallback(async ({ silent = false } = {}) => {
 }, [search, page, rowsPerPage]);
 
   // Fetch pieces for an equipment
-  const fetchPieces = useCallback(async (equipementId) => {
-    if (piecesMap[equipementId]) return; // Déjà chargé
+ const fetchPieces = useCallback(async (equipementId, { force = false } = {}) => {
+  if (piecesMap[equipementId] && !force) return;
     
     setLoadingPieces(prev => ({ ...prev, [equipementId]: true }));
     try {
@@ -509,7 +509,7 @@ const fetchEquipments = useCallback(async ({ silent = false } = {}) => {
     try {
       await pb.collection("pieces").delete(deletePiece.id);
       // Refresh pieces list for this equipment
-      await fetchPieces(currentEquipementId);
+      await fetchPieces(currentEquipementId, { force: true });
       setDeletePiece(null);
     } catch (e) {
       setError("Erreur lors de la suppression de la pièce : " + (e.message ?? "inconnue"));
@@ -592,7 +592,7 @@ const fetchEquipments = useCallback(async ({ silent = false } = {}) => {
         <PieceModal
           equipementId={currentEquipementId}
           onClose={() => { setShowPieceModal(false); setCurrentEquipementId(null); }}
-          onSaved={() => currentEquipementId && refreshPieces(currentEquipementId)}
+         onSaved={() => currentEquipementId && fetchPieces(currentEquipementId, { force: true })}
         />
       )}
       {editPiece && currentEquipementId && (
@@ -600,7 +600,7 @@ const fetchEquipments = useCallback(async ({ silent = false } = {}) => {
           equipementId={currentEquipementId}
           piece={editPiece}
           onClose={() => { setEditPiece(null); setCurrentEquipementId(null); }}
-          onSaved={() => currentEquipementId && refreshPieces(currentEquipementId)}
+         onSaved={() => currentEquipementId && fetchPieces(currentEquipementId, { force: true })}
         />
       )}
       {deletePiece && (
