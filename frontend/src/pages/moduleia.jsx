@@ -1,35 +1,92 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import PocketBase from "pocketbase";
 
 // ──────────────────────────────────────────────
 // CONFIG
 // ──────────────────────────────────────────────
 const pb = new PocketBase("http://127.0.0.1:8090");
-const AI_API_URL = "http://127.0.0.1:8000"; // Ton API FastAPI
+const AI_API_URL = "http://127.0.0.1:8000";
+
+// ──────────────────────────────────────────────
+// CACHE HELPERS
+// ──────────────────────────────────────────────
+const CACHE_KEY = "maintorg_ia_cache";
+const CACHE_TTL_MS = Infinity; // Ne jamais expirer automatiquement — refresh manuel uniquement
+
+function saveCache(data) {
+  try {
+    localStorage.setItem(
+      CACHE_KEY,
+      JSON.stringify({ timestamp: Date.now(), data })
+    );
+  } catch (e) {
+    console.warn("Cache save failed:", e);
+  }
+}
+
+function loadCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const { timestamp, data } = JSON.parse(raw);
+    return { timestamp, data };
+  } catch {
+    return null;
+  }
+}
+
+function clearCache() {
+  localStorage.removeItem(CACHE_KEY);
+}
+
+function formatCacheAge(timestamp) {
+  if (!timestamp) return "";
+  const diff = Date.now() - timestamp;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "à l'instant";
+  if (mins < 60) return `il y a ${mins} min`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `il y a ${hrs}h`;
+  return `il y a ${Math.floor(hrs / 24)}j`;
+}
 
 // ──────────────────────────────────────────────
 // HELPERS & FORMATTING
 // ──────────────────────────────────────────────
 const formatPercent = (val) => `${Math.round(val * 100)}%`;
 const formatHours = (val) => val > 0 ? `${val.toFixed(1)}h` : "N/A";
-const formatDate = (iso) => iso ? new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+const formatDate = (iso) =>
+  iso
+    ? new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })
+    : "—";
 
 const RiskLevelBadge = ({ level }) => {
   const cfg = {
-    "CRITIQUE": "bg-red-600 text-white",
-    "ÉLEVÉ": "bg-orange-500 text-white",
-    "MODÉRÉ": "bg-amber-400 text-white",
-    "FAIBLE": "bg-green-500 text-white",
+    CRITIQUE: "bg-red-600 text-white",
+    ÉLEVÉ: "bg-orange-500 text-white",
+    MODÉRÉ: "bg-amber-400 text-white",
+    FAIBLE: "bg-green-500 text-white",
   };
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-bold uppercase tracking-wide ${cfg[level] || "bg-gray-200 text-gray-700"}`}>
+    <span
+      className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-bold uppercase tracking-wide ${
+        cfg[level] || "bg-gray-200 text-gray-700"
+      }`}
+    >
       {level}
     </span>
   );
 };
 
 const ProbaBar = ({ value, method }) => {
-  const color = value >= 0.7 ? "bg-red-500" : value >= 0.45 ? "bg-amber-500" : value >= 0.25 ? "bg-blue-400" : "bg-green-400";
+  const color =
+    value >= 0.7
+      ? "bg-red-500"
+      : value >= 0.45
+      ? "bg-amber-500"
+      : value >= 0.25
+      ? "bg-blue-400"
+      : "bg-green-400";
   return (
     <div className="w-full">
       <div className="flex items-center justify-between text-xs mb-1">
@@ -37,24 +94,68 @@ const ProbaBar = ({ value, method }) => {
         <span className="font-semibold text-slate-800">{formatPercent(value)}</span>
       </div>
       <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-        <div className={`h-2 rounded-full ${color} transition-all duration-500`} style={{ width: `${value * 100}%` }} />
+        <div
+          className={`h-2 rounded-full ${color} transition-all duration-500`}
+          style={{ width: `${value * 100}%` }}
+        />
       </div>
-      <span className="text-[10px] text-gray-400 mt-0.5 block">{method === "lstm" ? "🧠 Prédiction LSTM" : "📊 Score heuristique"}</span>
+      <span className="text-[10px] text-gray-400 mt-0.5 block">
+        {method === "lstm" ? "🧠 Prédiction LSTM" : "📊 Score heuristique"}
+      </span>
     </div>
   );
 };
 
 // ──────────────────────────────────────────────
-// ICONS (mêmes que ton app)
+// ICONS
 // ──────────────────────────────────────────────
-const SearchIcon = () => (<svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>);
-const RefreshIcon = ({ spinning }) => (<svg className={`w-5 h-5 ${spinning ? "animate-spin" : ""}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>);
-const DownloadIcon = () => (<svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>);
-const BrainIcon = () => (<svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 2a4 4 0 0 0-4 4v1a3 3 0 0 0-3 3v2a3 3 0 0 0 3 3v1a4 4 0 0 0 8 0v-1a3 3 0 0 0 3-3v-2a3 3 0 0 0-3-3V6a4 4 0 0 0-4-4z"/><circle cx="9" cy="9" r="1"/><circle cx="15" cy="9" r="1"/><path d="M9 14h6"/></svg>);
-const AlertTriangleIcon = () => (<svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>);
-const CheckCircleIcon = () => (<svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>);
-const XIcon = () => (<svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>);
-const ChevronRightIcon = ({ expanded }) => (<svg className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${expanded ? "rotate-90" : ""}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>);
+const SearchIcon = () => (
+  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+  </svg>
+);
+const RefreshIcon = ({ spinning }) => (
+  <svg className={`w-5 h-5 ${spinning ? "animate-spin" : ""}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <polyline points="23 4 23 10 17 10" />
+    <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
+  </svg>
+);
+const DownloadIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+  </svg>
+);
+const BrainIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <path d="M12 2a4 4 0 0 0-4 4v1a3 3 0 0 0-3 3v2a3 3 0 0 0 3 3v1a4 4 0 0 0 8 0v-1a3 3 0 0 0 3-3v-2a3 3 0 0 0-3-3V6a4 4 0 0 0-4-4z" />
+    <circle cx="9" cy="9" r="1" /><circle cx="15" cy="9" r="1" /><path d="M9 14h6" />
+  </svg>
+);
+const AlertTriangleIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+    <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+  </svg>
+);
+const CheckCircleIcon = () => (
+  <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
+  </svg>
+);
+const ChevronRightIcon = ({ expanded }) => (
+  <svg
+    className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}
+    fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"
+  >
+    <polyline points="9 18 15 12 9 6" />
+  </svg>
+);
+const ClockIcon = () => (
+  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+  </svg>
+);
 
 // ──────────────────────────────────────────────
 // MAIN COMPONENT: Module IA
@@ -70,6 +171,14 @@ export default function ModuleIA() {
   const [expandedId, setExpandedId] = useState(null);
   const [reportUrl, setReportUrl] = useState("");
   const [equipementsList, setEquipementsList] = useState([]);
+  const [cacheTimestamp, setCacheTimestamp] = useState(null); // horodatage du cache actif
+  const [fromCache, setFromCache] = useState(false);          // indicateur visuel
+
+  // ── Charger depuis le cache ou l'API ──────────
+  const applyData = useCallback((analyse) => {
+    setAiData(analyse);
+    setEquipements(analyse?.equipements || []);
+  }, []);
 
   // Fetch equipements list for filter dropdown
   const fetchEquipementsList = useCallback(async () => {
@@ -81,74 +190,113 @@ export default function ModuleIA() {
     }
   }, []);
 
-  // Run AI Analysis
-  const runAnalysis = useCallback(async (equipementId = null, format = "json") => {
-    setAnalyzing(true);
-    setError("");
-    try {
-      const response = await fetch(`${AI_API_URL}/api/analyse`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ equipement_id: equipementId, output_format: format }),
-      });
-      if (!response.ok) throw new Error(`Erreur API: ${response.status}`);
-      const result = await response.json();
-      
-      if (format === "json") {
-        setAiData(result.analyse);
-        setEquipements(result.analyse?.equipements || []);
-      } else if (result.rapport_path) {
-        // Download DOCX
-        const filename = result.rapport_path.split("/").pop();
-        setReportUrl(`${AI_API_URL}/api/rapport/${filename}`);
-      }
-    } catch (e) {
-      setError("Erreur lors de l'analyse IA : " + e.message);
-      console.error(e);
-    } finally {
-      setAnalyzing(false);
-      setLoading(false);
-    }
-  }, []);
+  // ── Analyse complète (force = ignore cache) ──
+  const runAnalysis = useCallback(
+    async (equipementId = null, format = "json", forceRefresh = false) => {
+      setAnalyzing(true);
+      setError("");
+      try {
+        const response = await fetch(`${AI_API_URL}/api/analyse`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ equipement_id: equipementId, output_format: format }),
+        });
+        if (!response.ok) throw new Error(`Erreur API: ${response.status}`);
+        const result = await response.json();
 
-  // Fetch dashboard summary
-  const fetchDashboard = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${AI_API_URL}/api/dashboard`);
-      if (!res.ok) throw new Error("Erreur chargement dashboard");
-      const data = await res.json();
-      setAiData(data);
-      // Pour la liste complète, on lance aussi l'analyse JSON
-      runAnalysis(null, "json");
-    } catch (e) {
-      setError("Impossible de charger le dashboard IA");
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+        if (format === "json") {
+          applyData(result.analyse);
+          // Sauvegarder dans le cache uniquement lors d'une analyse globale
+          if (!equipementId) {
+            saveCache(result.analyse);
+            setCacheTimestamp(Date.now());
+            setFromCache(false);
+          }
+        } else if (result.rapport_path) {
+          const filename = result.rapport_path.split("/").pop();
+          setReportUrl(`${AI_API_URL}/api/rapport/${filename}`);
+        }
+      } catch (e) {
+        setError("Erreur lors de l'analyse IA : " + e.message);
+        console.error(e);
+      } finally {
+        setAnalyzing(false);
+        setLoading(false);
+      }
+    },
+    [applyData]
+  );
+
+  // ── Dashboard : cache en priorité ────────────
+  const fetchDashboard = useCallback(
+    async (forceRefresh = false) => {
+      // Si pas de forceRefresh → essayer le cache d'abord
+      if (!forceRefresh) {
+        const cached = loadCache();
+        if (cached) {
+          applyData(cached.data);
+          setCacheTimestamp(cached.timestamp);
+          setFromCache(true);
+          setLoading(false);
+          return; // ← on s'arrête ici, pas d'appel réseau
+        }
+      }
+
+      // Pas de cache ou refresh forcé → appel réseau
+      setLoading(true);
+      setFromCache(false);
+      try {
+        const res = await fetch(`${AI_API_URL}/api/dashboard`);
+        if (!res.ok) throw new Error("Erreur chargement dashboard");
+        const data = await res.json();
+        applyData(data);
+        // Lancer l'analyse complète pour peupler equipements
+        await runAnalysis(null, "json", true);
+      } catch (e) {
+        setError("Impossible de charger le dashboard IA");
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [applyData, runAnalysis]
+  );
+
+  // ── Refresh manuel (bouton) ──────────────────
+  const handleManualRefresh = useCallback(() => {
+    clearCache();
+    fetchDashboard(true);
+  }, [fetchDashboard]);
+
+  // ── Nouvelle analyse (bouton) ─────────────────
+  const handleNewAnalysis = useCallback(() => {
+    clearCache();
+    runAnalysis(null, "json", true);
   }, [runAnalysis]);
 
+  // ── Mount : charger depuis cache si disponible ─
   useEffect(() => {
     fetchEquipementsList();
-    fetchDashboard();
-  }, [fetchDashboard, fetchEquipementsList]);
+    fetchDashboard(false); // false = utilise le cache si dispo
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Filtered & searched equipements
-  const filteredEquipements = (aiData?.equipements || equipements).filter(eq => {
-    const matchSearch = !search || eq.nom?.toLowerCase().includes(search.toLowerCase()) || eq.zone?.toLowerCase().includes(search.toLowerCase());
+  // ── Filtres ───────────────────────────────────
+  const filteredEquipements = (aiData?.equipements || equipements).filter((eq) => {
+    const matchSearch =
+      !search ||
+      eq.nom?.toLowerCase().includes(search.toLowerCase()) ||
+      eq.zone?.toLowerCase().includes(search.toLowerCase());
     const matchRisk = !filterRisk || eq.niveau_risque === filterRisk;
     return matchSearch && matchRisk;
   });
 
-  // Stats
   const stats = aiData?.stats || aiData?.stats_globales || {};
-  const critiques = filteredEquipements.filter(e => e.niveau_risque === "CRITIQUE");
-  const eleves = filteredEquipements.filter(e => e.niveau_risque === "ÉLEVÉ");
+  const critiques = filteredEquipements.filter((e) => e.niveau_risque === "CRITIQUE");
+  const eleves = filteredEquipements.filter((e) => e.niveau_risque === "ÉLEVÉ");
 
   return (
-    <div className="p-4 bg-gray-50 min-h-screen font-sans">
-      {/* Header */}
+    <div className="p-4 bg-gray-50 min-h-screen font-sans rounded-2xl">
+      {/* ── Header ─────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl text-white shadow-lg">
@@ -161,6 +309,25 @@ export default function ModuleIA() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Badge cache */}
+          {fromCache && cacheTimestamp && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded-lg">
+              <ClockIcon />
+              <span>Cache – {formatCacheAge(cacheTimestamp)}</span>
+            </div>
+          )}
+
+          {/* Nouvelle analyse */}
+          <button
+            onClick={handleNewAnalysis}
+            disabled={analyzing}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors"
+            title="Relancer l'analyse et mettre à jour le cache"
+          >
+            <BrainIcon /> Nouvelle analyse
+          </button>
+
+          {/* Exporter rapport */}
           <button
             onClick={() => runAnalysis(null, "docx")}
             disabled={analyzing}
@@ -168,36 +335,42 @@ export default function ModuleIA() {
           >
             <DownloadIcon /> Exporter rapport
           </button>
+
+          {/* Refresh */}
           <button
-            onClick={fetchDashboard}
+            onClick={handleManualRefresh}
             disabled={analyzing}
             className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
-            title="Rafraîchir"
+            title="Rafraîchir les données (efface le cache)"
           >
             <RefreshIcon spinning={analyzing} />
           </button>
         </div>
       </div>
 
-      {/* Error Banner */}
+      {/* ── Error Banner ───────────────────────── */}
       {error && (
         <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 flex items-center gap-2">
           <AlertTriangleIcon /> {error}
         </div>
       )}
 
-      {/* Report Download Banner */}
+      {/* ── Report Download Banner ─────────────── */}
       {reportUrl && (
         <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm rounded-xl px-4 py-3 flex items-center justify-between">
           <span>✅ Rapport généré avec succès !</span>
-          <a href={reportUrl} download className="font-semibold underline hover:text-green-900">Télécharger le fichier .docx</a>
+          <a href={reportUrl} download className="font-semibold underline hover:text-green-900">
+            Télécharger le fichier .docx
+          </a>
         </div>
       )}
 
-      {/* Stats Cards */}
+      {/* ── Stats Cards ────────────────────────── */}
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          {[1,2,3,4].map(i => <div key={i} className="bg-white rounded-2xl p-5 border border-gray-300 animate-pulse h-28" />)}
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="bg-white rounded-2xl p-5 border border-gray-300 animate-pulse h-28" />
+          ))}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -220,7 +393,7 @@ export default function ModuleIA() {
         </div>
       )}
 
-      {/* Filters & Search */}
+      {/* ── Filters & Search ───────────────────── */}
       <div className="bg-white rounded-2xl border border-gray-300 shadow-sm p-4 mb-4 flex flex-wrap gap-3 items-end">
         <div className="flex items-center gap-2 bg-gray-50 border border-gray-300 rounded-xl px-4 py-2 w-64">
           <SearchIcon />
@@ -251,11 +424,13 @@ export default function ModuleIA() {
         </button>
       </div>
 
-      {/* Equipment List */}
+      {/* ── Equipment List ─────────────────────── */}
       <div className="bg-white rounded-2xl border border-gray-300 shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-300 flex items-center justify-between">
           <h3 className="font-semibold text-slate-800">Analyse par équipement</h3>
-          <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">{filteredEquipements.length} résultats</span>
+          <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">
+            {filteredEquipements.length} résultats
+          </span>
         </div>
 
         {analyzing ? (
@@ -312,7 +487,9 @@ export default function ModuleIA() {
                       </div>
                       <div>
                         <span className="text-xs font-semibold text-gray-500 uppercase">Dernière panne</span>
-                        <p className="text-slate-700 mt-1 font-medium">{eq.days_since_last_failure !== null ? `Il y a ${eq.days_since_last_failure}j` : "Jamais"}</p>
+                        <p className="text-slate-700 mt-1 font-medium">
+                          {eq.days_since_last_failure !== null ? `Il y a ${eq.days_since_last_failure}j` : "Jamais"}
+                        </p>
                       </div>
                     </div>
 
@@ -356,15 +533,17 @@ export default function ModuleIA() {
         )}
       </div>
 
-      {/* Model Info Footer */}
+      {/* ── Model Info Footer ──────────────────── */}
       <div className="mt-6 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl border border-indigo-100 p-4">
         <div className="flex items-start gap-3">
           <BrainIcon />
           <div className="text-sm text-gray-600">
-            <span className="font-semibold text-slate-800">Modèle utilisé :</span> LSTM (Long Short-Term Memory) avec 2 couches, dropout 0.2, entraîné sur les historiques de pannes et indicateurs de risque. 
+            <span className="font-semibold text-slate-800">Modèle utilisé :</span> LSTM (Long Short-Term
+            Memory) avec 2 couches, dropout 0.2, entraîné sur les historiques de pannes et indicateurs de
+            risque.
             <span className="block mt-1 text-xs text-gray-500">
-              Méthodologie : Les features incluent MTTR, MTBF, fréquence des pannes, retards d'OT, niveau de stock, et statut des plans préventifs. 
-              La prédiction est mise à jour à chaque analyse.
+              Méthodologie : Les features incluent MTTR, MTBF, fréquence des pannes, retards d'OT, niveau
+              de stock, et statut des plans préventifs. La prédiction est mise à jour à chaque analyse.
             </span>
           </div>
         </div>

@@ -153,13 +153,6 @@ const fetchData = useCallback(async ({ silent = false } = {}) => {
           <h1 className="text-2xl font-bold text-slate-800">Tableau de bord</h1>
           <p className="text-sm text-gray-500 mt-1">Vue d'ensemble de la maintenance en temps réel</p>
         </div>
-        <button
-          onClick={() => fetchData({ silent: true })}
-          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors shadow-lg"
-        >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
-          Actualiser
-        </button>
       </div>
 
 
@@ -290,7 +283,7 @@ const fetchData = useCallback(async ({ silent = false } = {}) => {
               <div className="space-y-3">
                 {[
                   { label: "Opérationnel", count: metrics.equipementsOp, color: "bg-green-500", total: metrics.equipementsTotal },
-                  { label: "Maintenance", count: countBy(data.equipements, "statut", "maintenance"), color: "bg-purple-500", total: metrics.equipementsTotal },
+                  { label: "Maintenance", count: countBy(data.equipements, "statut", "maintenance"), color: "bg-orange-500", total: metrics.equipementsTotal },
                   { label: "Hors service", count: metrics.equipementsHS, color: "bg-red-500", total: metrics.equipementsTotal },
                 ].map((item) => (
                   <div key={item.label}>

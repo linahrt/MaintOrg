@@ -42,7 +42,7 @@ export default function Sidebar() {
   ];
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 w-64 py-7 px-5 flex flex-col gap-1 font-[DM_Sans,sans-serif] h-screen mt-4">
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 w-64 py-7 px-5 flex flex-col gap-1 font-[DM_Sans,sans-serif] h-screen mt-4 ml-4 mb-4">
       <p className="text-xl font-semibold text-slate-800 mb-5 px-2">MaintOrg</p>
 
       <nav className="flex flex-col gap-1">

@@ -30,7 +30,7 @@ const PRIORITE_CONFIG = {
 const StatusBadge = ({ statut, config }) => {
   const cfg = config?.[statut] ?? { label: statut, classes: "bg-gray-200 text-gray-600" };
   return (
-    <span className={`inline-flex items-center px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wide ${cfg.classes}`}>
+    <span className={`inline-flex items-center px-3 py-1 rounded-xl text-xs font-bold uppercase tracking-wide ${cfg.classes}`}>
       {cfg.label}
     </span>
   );
@@ -39,7 +39,7 @@ const StatusBadge = ({ statut, config }) => {
 const PrioriteBadge = ({ priorite }) => {
   const cfg = PRIORITE_CONFIG[priorite] ?? PRIORITE_CONFIG.basse;
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold ${cfg.classes}`}>
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-xl text-xs font-semibold ${cfg.classes}`}>
       {cfg.label}
     </span>
   );

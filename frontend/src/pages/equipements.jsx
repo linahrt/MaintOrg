@@ -16,17 +16,33 @@ const STATUT_CONFIG = {
   maintenance:   { label: "Maintenance",     classes: "bg-amber-400 text-white" },
 };
 
+const STATUT_CONFIG_pieces = {
+  stock_disponible:  { label: "Stock disponible",    classes: "bg-green-500 text-white" },
+  stock_faible:  { label: "Stock faible",    classes: "bg-orange-500 text-white" },
+  rupture_de_stock: { label: "rupture de stock", classes: "bg-red-600 text-white" },
+};
+
 // ──────────────────────────────────────────────
 // SUB-COMPONENTS
 // ──────────────────────────────────────────────
 const StatusBadge = ({ statut }) => {
   const config = STATUT_CONFIG[statut] ?? { label: statut, classes: "bg-gray-200 text-gray-600" };
   return (
-    <span className={`inline-flex items-center px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wide ${config.classes}`}>
+    <span className={`inline-flex items-center px-3 py-1 rounded-xl text-xs font-bold uppercase tracking-wide ${config.classes}`}>
       {config.label}
     </span>
   );
 };
+
+const StatusBadgepieces = ({ statut }) => {
+  const config = STATUT_CONFIG_pieces[statut] ?? { label: statut, classes: "bg-gray-200 text-gray-600" };
+  return (
+    <span className={`inline-flex items-center px-3 py-1 rounded-xl text-xs font-bold uppercase tracking-wide ${config.classes}`}>
+      {config.label}
+    </span>
+  );
+};
+
 
 const Spinner = () => (
   <div className="flex items-center justify-center py-8">
@@ -223,7 +239,7 @@ const PieceModal = ({ onClose, onSaved, equipementId, piece = null }) => {
   const isEdit = !!piece;
   const [form, setForm] = useState({ 
     nom: piece?.nom || "", 
-    statut: piece?.statut || "operationnel", 
+    statut: piece?.statut || "stock_disponible", 
     reference: piece?.reference || "",
     quantite: piece?.quantite || 1,
     equipement: equipementId 
@@ -285,7 +301,7 @@ const PieceModal = ({ onClose, onSaved, equipementId, piece = null }) => {
               onChange={set("statut")}
               className="w-full border border-gray-600 text-black bg-gray rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-400 transition bg-white"
             >
-              {Object.entries(STATUT_CONFIG).map(([key, { label }]) => (
+              {Object.entries(STATUT_CONFIG_pieces).map(([key, { label }]) => (
                 <option key={key} value={key}>{label}</option>
               ))}
             </select>
@@ -726,76 +742,82 @@ const fetchEquipments = useCallback(async ({ silent = false } = {}) => {
                       </td>
                     </tr>
                     
-                    {/* Expandable row for pieces */}
-                    {expandedId === eq.id && (
-                      <tr>
-                        <td colSpan={7} className="px-4 py-3 bg-gradient-to-r from-gray-50/80 to-indigo-50/30">
-                          <div className="pl-10 border-l-2 border-indigo-300 ml-3">
-                            {/* Header with Add Piece button */}
-                            <div className="flex items-center justify-between mb-3">
-                              <h4 className="text-xs font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-2">
-                                <PackageIcon />
-                                Pièces ({piecesMap[eq.id]?.length || 0})
-                              </h4>
-                              <button
-                                onClick={() => { setCurrentEquipementId(eq.id); setShowPieceModal(true); }}
-                                className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors"
-                              >
-                                <PlusIcon /> Ajouter une pièce
-                              </button>
-                            </div>
-                            
-                            {/* Pieces list */}
-                            {loadingPieces[eq.id] ? (
-                              <div className="py-4 pl-2"><Spinner /></div>
-                            ) : piecesMap[eq.id]?.length > 0 ? (
-                              <ul className="space-y-2 max-h-60 overflow-y-auto pr-2">
-                                {piecesMap[eq.id].map((piece) => (
-                                  <li key={piece.id} className="group flex items-center justify-between bg-white rounded-xl px-4 py-3 shadow-lg border border-gray-300 hover:border-indigo-200 hover:shadow-md transition-all">
-                                    <div className="flex items-center gap-4 min-w-0 flex-1">
-                                      <StatusBadge statut={piece.statut} />
-                                      <div className="min-w-0 flex-1">
-                                        <span className="text-sm font-medium text-slate-700 truncate block">{piece.nom}</span>
-                                        <div className="flex items-center gap-3 mt-0.5">
-                                          {piece.reference && (
-                                            <span className="text-xs text-gray-400 font-mono bg-gray-50 px-2 py-0.5 rounded">{piece.reference}</span>
-                                          )}
-                                          {piece.quantite > 1 && (
-                                            <span className="text-xs text-indigo-500 font-medium">×{piece.quantite}</span>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
-                                    
-                                    {/* Piece actions */}
-                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                      <button
-                                        onClick={() => { setCurrentEquipementId(eq.id); setEditPiece(piece); }}
-                                        className="p-2 text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors"
-                                        title="Modifier la pièce"
-                                      >
-                                        <EditIcon />
-                                      </button>
-                                      <button
-                                        onClick={() => setDeletePiece(piece)}
-                                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                        title="Supprimer la pièce"
-                                      >
-                                        <TrashIcon />
-                                      </button>
-                                    </div>
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : (
-                              <div className="text-center py-6 pl-2">
-                                <p className="text-sm text-gray-400 italic mb-3">Aucune pièce ajoutée</p>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
+                   {/* Expandable row for pieces */}
+{expandedId === eq.id && (
+  <tr>
+    <td colSpan={7} className="px-4 py-3 bg-gray-50/50">
+      <div className="pl-4 border-l-2 border-indigo-300 ml-3">
+
+        {/* Header */}
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400 flex items-center gap-1.5">
+            <PackageIcon />
+            Pièces ({piecesMap[eq.id]?.length || 0})
+          </span>
+          <button
+            onClick={() => { setCurrentEquipementId(eq.id); setShowPieceModal(true); }}
+            className="flex items-center gap-1 text-xs font-medium text-indigo-500 border border-indigo-200 hover:bg-indigo-50 px-2.5 py-1 rounded-lg transition-colors"
+          >
+            <PlusIcon /> Ajouter
+          </button>
+        </div>
+
+        {/* Table */}
+        {loadingPieces[eq.id] ? (
+          <div className="py-3"><Spinner /></div>
+        ) : piecesMap[eq.id]?.length > 0 ? (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200">
+                {["#", "Nom", "Référence", "Qté", "Statut", ""].map((h, i) => (
+                  <th key={i} className="text-left text-[11px] font-medium text-gray-400 pb-1.5 px-2">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {piecesMap[eq.id].map((piece, idx) => (
+                <tr key={piece.id} className="border-b border-gray-100 last:border-0 hover:bg-white transition-colors">
+                  <td className="px-2 py-2 text-xs text-gray-400">{idx + 1}</td>
+                  <td className="px-2 py-2 font-medium text-slate-700">{piece.nom}</td>
+                  <td className="px-2 py-2">
+                    {piece.reference
+                      ? <span className="font-mono text-[11px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">{piece.reference}</span>
+                      : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-2 py-2">
+                    <span className="text-xs font-medium text-indigo-500">×{piece.quantite}</span>
+                  </td>
+                  <td className="px-2 py-2">
+                    <StatusBadgepieces statut={piece.statut} />
+                  </td>
+                  <td className="px-2 py-2">
+                    <div className="flex items-center gap-0.5">
+                      <button
+                        onClick={() => { setCurrentEquipementId(eq.id); setEditPiece(piece); }}
+                        className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-md transition-colors"
+                      >
+                        <EditIcon />
+                      </button>
+                      <button
+                        onClick={() => setDeletePiece(piece)}
+                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                      >
+                        <TrashIcon />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="text-center py-4 text-xs text-gray-400 italic">Aucune pièce ajoutée</p>
+        )}
+
+      </div>
+    </td>
+  </tr>
+)}
                   </Fragment>
                 ))
               )}
