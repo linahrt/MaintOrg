@@ -524,9 +524,9 @@ const fetchEquipments = useCallback(async ({ silent = false } = {}) => {
     if (!deletePiece || !currentEquipementId) return;
     try {
       await pb.collection("pieces").delete(deletePiece.id);
-      // Refresh pieces list for this equipment
       await fetchPieces(currentEquipementId, { force: true });
       setDeletePiece(null);
+      setCurrentEquipementId(null); // ← ajout
     } catch (e) {
       setError("Erreur lors de la suppression de la pièce : " + (e.message ?? "inconnue"));
     }
@@ -793,16 +793,22 @@ const fetchEquipments = useCallback(async ({ silent = false } = {}) => {
                   <td className="px-2 py-2">
                     <div className="flex items-center gap-0.5">
                       <button
-                        onClick={() => { setCurrentEquipementId(eq.id); setEditPiece(piece); }}
-                        className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-md transition-colors"
+                          onClick={() => {
+                            setCurrentEquipementId(eq.id);
+                            setEditPiece(piece);
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-md transition-colors"
                       >
-                        <EditIcon />
+                        <EditIcon/>
                       </button>
                       <button
-                        onClick={() => setDeletePiece(piece)}
-                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                          onClick={() => {
+                            setCurrentEquipementId(eq.id);
+                            setDeletePiece(piece);
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
                       >
-                        <TrashIcon />
+                        <TrashIcon/>
                       </button>
                     </div>
                   </td>
@@ -811,7 +817,7 @@ const fetchEquipments = useCallback(async ({ silent = false } = {}) => {
             </tbody>
           </table>
         ) : (
-          <p className="text-center py-4 text-xs text-gray-400 italic">Aucune pièce ajoutée</p>
+            <p className="text-center py-4 text-xs text-gray-400 italic">Aucune pièce ajoutée</p>
         )}
 
       </div>
