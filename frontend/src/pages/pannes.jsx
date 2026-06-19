@@ -33,18 +33,7 @@ const PRIORITE_CONFIG = {
  * Utilise jsPDF chargé dynamiquement depuis CDN.
  */
 const generateFicheTechnicien = async (panne, getEquipementName) => {
-  // Chargement dynamique de jsPDF si pas encore disponible
-  if (!window.jspdf) {
-    await new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
-      script.onload = resolve;
-      script.onerror = reject;
-      document.head.appendChild(script);
-    });
-  }
-
-  const { jsPDF } = window.jspdf;
+  const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 
   const W = 210; // largeur A4 mm
