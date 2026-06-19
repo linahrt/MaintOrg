@@ -1,0 +1,5 @@
+# PocketBase data
+MaintOrg/backend/db/pb_data/
+
+# PocketBase migrations
+MaintOrg/backend/db/pb_migrations/
