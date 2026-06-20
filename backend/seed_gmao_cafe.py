@@ -6,6 +6,12 @@ Ne touche PAS aux équipements existants.
 Usage:
     pip install requests python-dateutil
     python seed_gmao_cafe.py --url http://127.0.0.1:8090/ --email haretlina0@gmail.com --password 4NAJeLiL7tncviY
+
+    # Pour tout vider avant de remplir :
+    python seed_gmao_cafe.py --url http://... --email ... --password ... --clear
+
+    # Personnaliser les volumes :
+    python seed_gmao_cafe.py ... --pannes 80 --ots 120 --pieces 100
 """
 
 import argparse
