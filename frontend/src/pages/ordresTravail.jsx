@@ -7,77 +7,65 @@ import PocketBase from "pocketbase";
 const pb = new PocketBase("http://127.0.0.1:8090");
 
 // ──────────────────────────────────────────────
-// STATUT CONFIG pour les ordres de travail
+// STATUT CONFIG pour les ordres de travail (avec couleurs RGB Tailwind pour le PDF)
 // ──────────────────────────────────────────────
 const STATUT_OT_CONFIG = {
-  brouillon:    { label: "Brouillon",     classes: "bg-gray-400 text-white" },
-  planifie:     { label: "Planifié",      classes: "bg-blue-500 text-white" },
-  en_cours:     { label: "En cours",      classes: "bg-amber-500 text-white" },
-  en_attente:   { label: "En attente",    classes: "bg-purple-500 text-white" },
-  termine:      { label: "Terminé",       classes: "bg-green-500 text-white" },
-  annule:       { label: "Annulé",        classes: "bg-red-500 text-white" },
+  brouillon:    { label: "Brouillon",     classes: "bg-gray-400 text-white",   rgb: [156, 163, 175], textRgb: [255, 255, 255] },
+  planifie:     { label: "Planifié",      classes: "bg-blue-500 text-white",   rgb: [59, 130, 246],  textRgb: [255, 255, 255] },
+  en_cours:     { label: "En cours",      classes: "bg-amber-500 text-white",  rgb: [245, 158, 11],  textRgb: [255, 255, 255] },
+  en_attente:   { label: "En attente",    classes: "bg-purple-500 text-white", rgb: [168, 85, 247],  textRgb: [255, 255, 255] },
+  termine:      { label: "Terminé",       classes: "bg-green-500 text-white",  rgb: [34, 197, 94],   textRgb: [255, 255, 255] },
+  annule:       { label: "Annulé",        classes: "bg-red-500 text-white",    rgb: [239, 68, 68],   textRgb: [255, 255, 255] },
 };
 
 const PRIORITE_CONFIG = {
-  basse:   { label: "Basse",   classes: "bg-gray-200 text-gray-700" },
-  moyenne: { label: "Moyenne", classes: "bg-amber-200 text-amber-800" },
-  haute:   { label: "Haute",   classes: "bg-orange-400 text-white" },
-  critique:{ label: "Critique",classes: "bg-red-600 text-white" },
+  basse:   { label: "Basse",   classes: "bg-gray-200 text-gray-700",   rgb: [229, 231, 235], textRgb: [55, 65, 81] },
+  moyenne: { label: "Moyenne", classes: "bg-amber-200 text-amber-800", rgb: [253, 230, 138], textRgb: [146, 64, 14] },
+  haute:   { label: "Haute",   classes: "bg-orange-400 text-white",    rgb: [251, 146, 60],  textRgb: [255, 255, 255] },
+  critique:{ label: "Critique",classes: "bg-red-600 text-white",       rgb: [220, 38, 38],   textRgb: [255, 255, 255] },
 };
 
 const TYPE_OT_CONFIG = {
-  correctif:  { label: "Correctif",  classes: "bg-red-100 text-red-700" },
-  preventif:  { label: "Préventif",  classes: "bg-blue-100 text-blue-700" },
-  amelioratif:{ label: "Amélioratif",classes: "bg-purple-100 text-purple-700" },
-  urgent:     { label: "Urgent",     classes: "bg-rose-100 text-rose-700" },
+  correctif:   { label: "Correctif",   classes: "bg-red-100 text-red-700",     rgb: [254, 226, 226], textRgb: [185, 28, 28] },
+  preventif:   { label: "Préventif",   classes: "bg-blue-100 text-blue-700",   rgb: [219, 234, 254], textRgb: [29, 78, 216] },
+  amelioratif: { label: "Amélioratif", classes: "bg-purple-100 text-purple-700", rgb: [243, 232, 255], textRgb: [126, 34, 206] },
+  urgent:      { label: "Urgent",      classes: "bg-rose-100 text-rose-700",   rgb: [255, 228, 230], textRgb: [190, 18, 60] },
 };
 
 // ──────────────────────────────────────────────
 // PDF EXPORT — génère le rapport OT avec jsPDF
 // ──────────────────────────────────────────────
 const generateOTPDF = async (ot, getEquipementName, getPanneTitle) => {
-  // Import dynamique jsPDF (installé via npm : npm install jspdf)
   const { jsPDF } = await import("jspdf");
-
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 
-  const W = 210;   // largeur A4
-  const M = 15;    // marge
-  const CW = W - M * 2; // largeur contenu
+  const W = 210; // largeur A4 mm
+  const MARGIN = 18;
+  const COL = W - MARGIN * 2;
+  let y = 0;
 
-  // Couleurs
-  const C_PRIMARY   = [37, 99, 235];    // indigo-600
-  const C_SUCCESS   = [5, 150, 105];    // emerald-600
-  const C_DANGER    = [220, 38, 38];    // red-600
-  const C_WARN      = [217, 119, 6];    // amber-600
-  const C_PURPLE    = [124, 58, 237];   // violet-600
-  const C_GRAY_DARK = [30, 41, 59];     // slate-800
-  const C_GRAY_MID  = [100, 116, 139];  // slate-500
-  const C_GRAY_LT   = [241, 245, 249];  // slate-100
-  const C_WHITE     = [255, 255, 255];
+  // ── Helpers ───────────────────────────────────
+  const setFont = (style = "normal", size = 10) => {
+    doc.setFont("helvetica", style);
+    doc.setFontSize(size);
+  };
 
-  const statusColor = {
-    brouillon:  [107, 114, 128],
-    planifie:   C_PRIMARY,
-    en_cours:   C_WARN,
-    en_attente: C_PURPLE,
-    termine:    C_SUCCESS,
-    annule:     C_DANGER,
-  }[ot.statut] || C_GRAY_MID;
+  const text = (str, x, yPos, opts = {}) => {
+    doc.text(str ?? "—", x, yPos, opts);
+  };
 
-  const prioriteColor = {
-    basse:    [107, 114, 128],
-    moyenne:  C_WARN,
-    haute:    [234, 88, 12],
-    critique: C_DANGER,
-  }[ot.priorite] || C_GRAY_MID;
+  const wrapText = (str, x, yPos, maxW, lineH = 5) => {
+    if (!str) { text("—", x, yPos); return yPos + lineH; }
+    const lines = doc.splitTextToSize(str, maxW);
+    doc.text(lines, x, yPos);
+    return yPos + lines.length * lineH;
+  };
 
-  const typeColor = {
-    correctif:   C_DANGER,
-    preventif:   C_PRIMARY,
-    amelioratif: C_PURPLE,
-    urgent:      [225, 29, 72],
-  }[ot.type] || C_GRAY_MID;
+  const hrLine = (yPos, color = [200, 200, 200]) => {
+    doc.setDrawColor(...color);
+    doc.line(MARGIN, yPos, W - MARGIN, yPos);
+    doc.setDrawColor(0);
+  };
 
   const formatDate = (iso) => {
     if (!iso) return "—";
@@ -85,237 +73,275 @@ const generateOTPDF = async (ot, getEquipementName, getPanneTitle) => {
     return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
   };
 
-  const wrapText = (text, maxWidth, fontSize) => {
-    doc.setFontSize(fontSize);
-    return doc.splitTextToSize(text || "—", maxWidth);
+  const formatDateTime = (iso) => {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    return formatDate(iso) + " " + d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
   };
 
-  // ── En-tête bleu ──────────────────────────────
-  doc.setFillColor(...C_PRIMARY);
-  doc.rect(0, 0, W, 38, "F");
+  // Configs
+  const statutCfg = STATUT_OT_CONFIG[ot.statut] ?? { label: ot.statut ?? "—" };
+  const statutLabel = statutCfg.label ?? ot.statut ?? "—";
+  const prioriteCfg = PRIORITE_CONFIG[ot.priorite] ?? { label: ot.priorite ?? "—" };
+  const prioriteLabel = prioriteCfg.label ?? ot.priorite ?? "—";
+  const typeCfg = TYPE_OT_CONFIG[ot.type] ?? { label: ot.type ?? "—" };
+  const typeLabel = typeCfg.label ?? ot.type ?? "—";
 
-  // Logo / entreprise
-  doc.setFontSize(9);
-  doc.setTextColor(...C_WHITE);
-  doc.setFont("helvetica", "bold");
-  doc.text("GMAO — RAPPORT D'ORDRE DE TRAVAIL", M, 11);
+  const equipementNom = getEquipementName(ot);
+  const panneTitre = getPanneTitle(ot);
 
-  // Référence en grand
-  doc.setFontSize(22);
-  doc.text(ot.reference || "OT-XXXX-0000", M, 24);
+  // Couleur statut
+  const statutColor = {
+    ouvert:        [66, 120, 220],
+    en_cours:      [210, 150, 30],
+    en_pause:      [180, 100, 180],
+    termine:       [40, 160, 80],
+    annule:        [180, 30, 30],
+  }[ot.statut] ?? [100, 100, 100];
 
-  // Date de génération (coin droit)
-  doc.setFontSize(8);
-  doc.setFont("helvetica", "normal");
-  const now = new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
-  doc.text(`Généré le ${now}`, W - M, 11, { align: "right" });
+  // Couleur priorité
+  const prioriteColor = {
+    basse:    [100, 120, 100],
+    moyenne:  [180, 120, 30],
+    haute:    [210, 100, 30],
+    critique: [200, 40, 40],
+  }[ot.priorite] ?? [100, 100, 100];
 
-  // Titre de l'OT sous la ref
-  doc.setFontSize(10);
-  doc.text(ot.titre || "Sans titre", M, 32);
+  // Couleur type
+  const typeColor = {
+    correctif:  [220, 100, 50],
+    preventif:  [60, 140, 200],
+    amelioratif:[150, 80, 180],
+    urgent:     [200, 40, 40],
+  }[ot.type] ?? [100, 100, 100];
 
-  // ── Badges statut / priorité / type ───────────
-  let badgeX = M;
-  const badgeY = 43;
+  // ── EN-TÊTE ───────────────────────────────────
+  y = MARGIN;
 
-  const drawBadge = (label, color, x) => {
-    const pad = 3;
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "bold");
-    const tw = doc.getTextWidth(label.toUpperCase());
-    const bw = tw + pad * 2;
-    doc.setFillColor(...color);
-    doc.roundedRect(x, badgeY - 4.5, bw, 6.5, 2, 2, "F");
-    doc.setTextColor(...C_WHITE);
-    doc.text(label.toUpperCase(), x + pad, badgeY, { baseline: "bottom" });
-    return x + bw + 3;
-  };
+  // Bandeau gris foncé
+  doc.setFillColor(35, 38, 48);
+  doc.roundedRect(MARGIN, y, COL, 22, 3, 3, "F");
 
-  badgeX = drawBadge(STATUT_OT_CONFIG[ot.statut]?.label || ot.statut, statusColor, badgeX);
-  badgeX = drawBadge(PRIORITE_CONFIG[ot.priorite]?.label || ot.priorite, prioriteColor, badgeX);
-  drawBadge(TYPE_OT_CONFIG[ot.type]?.label || ot.type, typeColor, badgeX);
+  setFont("bold", 16);
+  doc.setTextColor(255, 255, 255);
+  text("ORDRE DE TRAVAIL (OT)", MARGIN + 6, y + 10);
 
-  // ── Ligne séparatrice ─────────────────────────
-  let y = 56;
-  doc.setDrawColor(226, 232, 240);
-  doc.setLineWidth(0.3);
-  doc.line(M, y, W - M, y);
+  setFont("normal", 8);
+  doc.setTextColor(180, 185, 200);
+  const now = new Date();
+  text(
+      `Généré le ${now.toLocaleDateString("fr-FR")} à ${now.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`,
+      MARGIN + 6,
+      y + 17
+  );
+
+  // Référence OT (coin droit)
+  setFont("bold", 8);
+  doc.setTextColor(200, 205, 220);
+  text(`Réf. OT : ${ot.reference ?? "—"}`, W - MARGIN - 6, y + 10, { align: "right" });
+
+  doc.setTextColor(0, 0, 0);
+  y += 28;
+
+  // ── TITRE DE L'OT ─────────────────────────
+  setFont("bold", 14);
+  doc.setTextColor(20, 20, 60);
+  y = wrapText(ot.titre ?? "Sans titre", MARGIN, y, COL, 7);
+  doc.setTextColor(0, 0, 0);
+  y += 2;
+
+  // Badges statut + priorité + type inline
+  const badgeY = y;
+
+  // Statut
+  doc.setFillColor(...statutColor);
+  doc.roundedRect(MARGIN, badgeY, 32, 6, 1.5, 1.5, "F");
+  setFont("bold", 7);
+  doc.setTextColor(255, 255, 255);
+  text(statutLabel.toUpperCase(), MARGIN + 16, badgeY + 4.2, { align: "center" });
+
+  // Priorité
+  doc.setFillColor(...prioriteColor);
+  doc.roundedRect(MARGIN + 34, badgeY, 28, 6, 1.5, 1.5, "F");
+  text(prioriteLabel.toUpperCase(), MARGIN + 48, badgeY + 4.2, { align: "center" });
+
+  // Type
+  doc.setFillColor(...typeColor);
+  doc.roundedRect(MARGIN + 64, badgeY, 30, 6, 1.5, 1.5, "F");
+  text(typeLabel.toUpperCase(), MARGIN + 79, badgeY + 4.2, { align: "center" });
+
+  doc.setTextColor(0, 0, 0);
+  y += 12;
+  hrLine(y, [220, 220, 220]);
   y += 6;
 
-  // ── Fonction section titre ─────────────────────
-  const sectionTitle = (title, yPos) => {
-    doc.setFillColor(...C_GRAY_LT);
-    doc.rect(M, yPos - 4, CW, 7, "F");
-    doc.setFontSize(8.5);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(...C_GRAY_DARK);
-    doc.text(title, M + 2, yPos);
-    return yPos + 7;
+  // ── SECTION : IDENTIFICATION & ÉQUIPEMENT ─────────
+  const sectionHeader = (title, yPos) => {
+    doc.setFillColor(240, 241, 248);
+    doc.rect(MARGIN, yPos, COL, 7, "F");
+    setFont("bold", 9);
+    doc.setTextColor(40, 50, 120);
+    text(title, MARGIN + 3, yPos + 4.8);
+    doc.setTextColor(0, 0, 0);
+    return yPos + 10;
   };
 
-  // ── Fonction champ label / valeur ─────────────
-  const field = (label, value, x, yPos, fw) => {
-    doc.setFontSize(7.5);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(...C_GRAY_MID);
-    doc.text(label, x, yPos);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(...C_GRAY_DARK);
-    const lines = wrapText(String(value || "—"), fw, 8.5);
-    doc.text(lines, x, yPos + 4.5);
-    return yPos + 4.5 + (lines.length - 1) * 4;
+  const fieldRow = (label, value, xStart, yPos, colW) => {
+    setFont("bold", 8);
+    doc.setTextColor(90, 90, 110);
+    text(label, xStart, yPos);
+    setFont("normal", 9);
+    doc.setTextColor(20, 20, 40);
+    text(String(value ?? "—"), xStart, yPos + 5);
+    doc.setTextColor(0, 0, 0);
+    return yPos + 11;
   };
 
-  // ── Section 1 : Identification ────────────────
-  y = sectionTitle("IDENTIFICATION & ÉQUIPEMENT", y);
-  y += 3;
+  y = sectionHeader("1. IDENTIFICATION & ÉQUIPEMENT", y);
 
-  const colW = CW / 2 - 3;
-  field("Équipement", getEquipementName(ot), M, y, colW);
-  field("Panne liée", getPanneTitle(ot), M + colW + 6, y, colW);
+  const C1 = MARGIN;
+  const C2 = MARGIN + COL / 2 + 3;
+  const CW = COL / 2 - 3;
+
+  fieldRow("Équipement concerné", equipementNom, C1, y, CW);
+  fieldRow("Panne liée", panneTitre, C2, y, CW);
   y += 12;
 
-  field("Date de création", formatDate(ot.date_creation || ot.created), M, y, colW);
-  field("Créé / modifié", `${formatDate(ot.created)} / ${formatDate(ot.updated)}`, M + colW + 6, y, colW);
+  fieldRow("Date de création", formatDate(ot.date_creation || ot.created), C1, y, CW);
+  fieldRow("Dernière modification", formatDateTime(ot.updated), C2, y, CW);
   y += 14;
 
-  doc.setDrawColor(226, 232, 240);
-  doc.line(M, y, W - M, y);
-  y += 6;
+  // ── SECTION : PLANNING & RESSOURCES ──────────────
+  y = sectionHeader("2. PLANNING & RESSOURCES", y);
 
-  // ── Section 2 : Planning & Ressources ─────────
-  y = sectionTitle("PLANNING & RESSOURCES", y);
-  y += 3;
+  // 3 colonnes
+  const col3W = COL / 3 - 2;
+  const C3_1 = MARGIN;
+  const C3_2 = MARGIN + col3W + 3;
+  const C3_3 = MARGIN + (col3W + 3) * 2;
 
-  const col3W = CW / 3 - 2;
-  field("Date début", formatDate(ot.date_debut), M, y, col3W);
-  field("Fin prévue", formatDate(ot.date_fin_prevue), M + col3W + 3, y, col3W);
-  field("Fin réelle", formatDate(ot.date_fin_reelle), M + (col3W + 3) * 2, y, col3W);
+  fieldRow("Date début", formatDate(ot.date_debut), C3_1, y, col3W);
+  fieldRow("Fin prévue", formatDate(ot.date_fin_prevue), C3_2, y, col3W);
+  fieldRow("Fin réelle", formatDate(ot.date_fin_reelle), C3_3, y, col3W);
   y += 12;
 
-  field("Technicien", ot.technicien, M, y, col3W);
-  field("Équipe", ot.equipe, M + col3W + 3, y, col3W);
+  fieldRow("Technicien", ot.technicien || "Non assigné", C3_1, y, col3W);
+  fieldRow("Équipe", ot.equipe || "—", C3_2, y, col3W);
 
   const tempsLabel = (ot.temps_estime && ot.temps_reel)
       ? `${ot.temps_estime}h estimé / ${ot.temps_reel}h réel`
       : ot.temps_estime ? `${ot.temps_estime}h estimé`
           : ot.temps_reel ? `${ot.temps_reel}h réel` : "—";
-  field("Temps (estimé / réel)", tempsLabel, M + (col3W + 3) * 2, y, col3W);
+  fieldRow("Temps (estimé / réel)", tempsLabel, C3_3, y, col3W);
   y += 14;
 
-  doc.setDrawColor(226, 232, 240);
-  doc.line(M, y, W - M, y);
-  y += 6;
-
-  // ── Section 3 : Description ───────────────────
-  if (ot.description) {
-    y = sectionTitle("DESCRIPTION", y);
-    y += 3;
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(...C_GRAY_DARK);
-    const descLines = wrapText(ot.description, CW, 9);
-    doc.text(descLines, M, y);
-    y += descLines.length * 4.5 + 6;
-
-    doc.setDrawColor(226, 232, 240);
-    doc.line(M, y, W - M, y);
+  // ── SECTION : DESCRIPTION ──────────────────────
+  if (ot.description?.trim()) {
+    y = sectionHeader("3. DESCRIPTION", y);
+    setFont("normal", 9);
+    y = wrapText(ot.description, MARGIN + 2, y, COL - 4, 5.5);
     y += 6;
   }
 
-  // ── Section 4 : Instructions techniques ───────
-  if (ot.instructions) {
-    // Vérif saut de page
-    if (y > 240) { doc.addPage(); y = 20; }
+  // ── SECTION : INSTRUCTIONS TECHNIQUES ──────────
+  if (ot.instructions?.trim()) {
+    if (y + 40 > 280) {
+      doc.addPage();
+      y = MARGIN;
+    }
 
-    y = sectionTitle("INSTRUCTIONS TECHNIQUES", y);
-    y += 3;
+    y = sectionHeader("4. INSTRUCTIONS TECHNIQUES", y);
 
-    // Boite grisée style terminal
-    const instrLines = wrapText(ot.instructions, CW - 6, 8);
-    const boxH = instrLines.length * 4.2 + 6;
     doc.setFillColor(248, 250, 252);
+    const instrLines = doc.splitTextToSize(ot.instructions, COL - 10);
+    const instrH = instrLines.length * 5 + 8;
+    doc.roundedRect(MARGIN, y, COL, instrH, 2, 2, "F");
     doc.setDrawColor(203, 213, 225);
-    doc.setLineWidth(0.4);
-    doc.rect(M, y - 2, CW, boxH, "FD");
+    doc.roundedRect(MARGIN, y, COL, instrH, 2, 2, "D");
+    doc.setDrawColor(0);
+
+    setFont("courier", "normal");
     doc.setFontSize(8);
-    doc.setFont("courier", "normal");
     doc.setTextColor(51, 65, 85);
-    doc.text(instrLines, M + 3, y + 2);
-    y += boxH + 6;
-
-    doc.setDrawColor(226, 232, 240);
-    doc.line(M, y, W - M, y);
-    y += 6;
+    doc.text(instrLines, MARGIN + 5, y + 6);
+    doc.setTextColor(0, 0, 0);
+    y += instrH + 8;
   }
 
-  // ── Section 5 : Notes de clôture ──────────────
-  if (ot.notes_cloture) {
-    if (y > 240) { doc.addPage(); y = 20; }
+  // ── SECTION : NOTES DE CLÔTURE ─────────────────
+  if (ot.notes_cloture?.trim()) {
+    if (y + 30 > 280) {
+      doc.addPage();
+      y = MARGIN;
+    }
 
-    y = sectionTitle("NOTES DE CLÔTURE", y);
-    y += 3;
+    y = sectionHeader("5. NOTES DE CLÔTURE", y);
 
-    const noteLines = wrapText(ot.notes_cloture, CW - 6, 9);
-    const noteBoxH = noteLines.length * 4.5 + 6;
     doc.setFillColor(240, 253, 244);
-    doc.setDrawColor(134, 239, 172);
-    doc.setLineWidth(0.4);
-    doc.rect(M, y - 2, CW, noteBoxH, "FD");
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(6, 78, 59);
-    doc.text(noteLines, M + 3, y + 2);
-    y += noteBoxH + 6;
+    const noteLines = doc.splitTextToSize(ot.notes_cloture, COL - 10);
+    const noteH = noteLines.length * 5 + 8;
+    doc.roundedRect(MARGIN, y, COL, noteH, 2, 2, "F");
+    doc.setDrawColor(187, 247, 208);
+    doc.roundedRect(MARGIN, y, COL, noteH, 2, 2, "D");
+    doc.setDrawColor(0);
+
+    setFont("normal", 9);
+    doc.setTextColor(21, 128, 61);
+    doc.text(noteLines, MARGIN + 5, y + 6);
+    doc.setTextColor(0, 0, 0);
+    y += noteH + 8;
   }
 
-  // ── Zone signature agent ───────────────────────
-  if (y > 230) { doc.addPage(); y = 20; }
-
-  y = Math.max(y, 230); // pousse en bas de page si espace
-
-  doc.setDrawColor(203, 213, 225);
-  doc.setLineWidth(0.3);
-  doc.line(M, y, W - M, y);
-  y += 6;
-
-  doc.setFontSize(8);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(...C_GRAY_DARK);
-  doc.text("VISA AGENT / TECHNICIEN", M, y);
-  doc.text("VISA RESPONSABLE", W / 2 + 5, y);
-  y += 14;
-
-  // Lignes de signature
-  doc.setDrawColor(100, 116, 139);
-  doc.setLineWidth(0.5);
-  doc.line(M, y, M + CW / 2 - 5, y);
-  doc.line(W / 2 + 5, y, W - M, y);
-  y += 4;
-
-  doc.setFontSize(7.5);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(...C_GRAY_MID);
-  doc.text("Nom, date et signature", M, y);
-  doc.text("Nom, date et signature", W / 2 + 5, y);
-
-  // ── Pied de page ──────────────────────────────
-  const pageCount = doc.getNumberOfPages();
-  for (let i = 1; i <= pageCount; i++) {
-    doc.setPage(i);
-    doc.setFillColor(...C_PRIMARY);
-    doc.rect(0, 287, W, 10, "F");
-    doc.setFontSize(7);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(...C_WHITE);
-    doc.text(`GMAO — ${ot.reference} — Document généré automatiquement`, M, 293);
-    doc.text(`Page ${i} / ${pageCount}`, W - M, 293, { align: "right" });
+  // ── SECTION : SIGNATURES ──────────────────────
+  const sigY = y + 4;
+  if (sigY + 30 > 285) {
+    doc.addPage();
+    y = MARGIN;
+  } else {
+    y = sigY;
   }
 
-  // ── Sauvegarde ────────────────────────────────
-  doc.save(`OT_${ot.reference}_${new Date().toISOString().split("T")[0]}.pdf`);
+  y = sectionHeader("6. SIGNATURES ET VALIDATION", y);
+
+  const sigBoxW = COL / 2 - 4;
+  const sigBoxH = 25;
+  const sigPositions = [
+    { label: "Technicien / Agent", x: MARGIN },
+    { label: "Responsable", x: MARGIN + sigBoxW + 8 },
+  ];
+
+  sigPositions.forEach(({ label, x }) => {
+    doc.setDrawColor(160, 160, 180);
+    doc.setFillColor(252, 252, 255);
+    doc.roundedRect(x, y, sigBoxW, sigBoxH, 2, 2, "FD");
+    doc.setDrawColor(0);
+    setFont("bold", 7);
+    doc.setTextColor(80, 80, 110);
+    text(label, x + sigBoxW / 2, y + 4, { align: "center" });
+    setFont("normal", 7);
+    doc.setTextColor(140, 140, 160);
+    text("Nom + Signature + Date", x + sigBoxW / 2, y + sigBoxH - 4, { align: "center" });
+    doc.setTextColor(0, 0, 0);
+  });
+
+  y += sigBoxH + 10;
+
+  // ── PIED DE PAGE ──────────────────────────────
+  const totalPages = doc.internal.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    const pageH = doc.internal.pageSize.height;
+    hrLine(pageH - 14, [200, 200, 210]);
+    setFont("normal", 7);
+    doc.setTextColor(150, 150, 160);
+    text("MaintOrg", MARGIN, pageH - 9);
+    text(`Page ${p} / ${totalPages}`, W - MARGIN, pageH - 9, { align: "right" });
+  }
+
+  // ── TÉLÉCHARGEMENT ────────────────────────────
+  const safeRef = (ot.reference ?? "OT").replace(/[^a-z0-9]/gi, "_").slice(0, 30);
+  doc.save(`OT_${safeRef}_${new Date().toISOString().split("T")[0]}.pdf`);
 };
-
 // ──────────────────────────────────────────────
 // SUB-COMPONENTS (réutilisables)
 // ──────────────────────────────────────────────
